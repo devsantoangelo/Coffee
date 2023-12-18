@@ -60,9 +60,6 @@ class DB {
 
             int idx2 = 0;
             while ( idx2 < sizeData ) {
-
-// Serial.println( dataJson[idx2].length() );
-
                 (* fnc)( dataJson[idx2] );
                 idx2 += 1;
             }

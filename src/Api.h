@@ -43,7 +43,6 @@ class Api {
                     repo["valor"].as<float>(),
                     repo["valor_associado"].as<float>(),
                     repo["botao"].as<int>() );
-        
         }
       }
     }
@@ -58,23 +57,23 @@ class Api {
     void postConsumer( const String registro, FuncCallBackResp sucess, FuncCallBackResp error  ) {
 
       String urlConsumer = baseURL;
-      urlConsumer.concat("add/" + registro );
-
+      
+      urlConsumer.concat("movements/add" );
+      
       http.begin(client, urlConsumer);
 
-      http.addHeader("Content-Type", "application/json");
+      http.addHeader("content-type", "application/json");
 
-      int httpResponseCode = http.GET(); 
       String payload = "{}"; 
 
-      Serial.println(urlConsumer);
+      int httpResponseCode = http.POST( registro );
 
       if ( httpResponseCode > 0 ) {
         payload = http.getString();
-      }
-      http.end();
+        Serial.println(payload);
+      } 
 
-      Serial.println( httpResponseCode );
+      http.end();
 
       if ( ( httpResponseCode >= 200 ) && ( httpResponseCode <= 299 ) ) {
         (* sucess)( registro );
@@ -89,9 +88,7 @@ class Api {
 
         String urlSaldo = baseURL;
         urlSaldo.concat("getSaldo/" + credential );
-
         http.begin(client, urlSaldo);
-
         int httpResponseCode = http.GET();
 
         if ( httpResponseCode > 0 ) {

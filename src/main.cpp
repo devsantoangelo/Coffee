@@ -25,7 +25,13 @@ int 	optionMoment 	= 0;
 int 	idxProducts  	= 0;
 bool 	stPendents 		= false;
 
+float minPriceProduct 		= 1000.00;
+float minPriceProductMember = 1000.00;
+float maxPriceProduct 		= 0.00;
+
 TimeProcess timeUpdateTime( 600 );
+
+TimeProcess timeConsumer( 2 );
 
 typedef struct {
 	int  	id;
@@ -50,6 +56,8 @@ unsigned int intPinB2 		= BOTAO_2;
 unsigned int intPinB3 		= BOTAO_3;
 unsigned int intPinB4 		= BOTAO_4;
 
+int idProdutConsumer = 0;
+
 void consume( int option );
 void configWiFi();
 void configSelectProducts();
@@ -59,6 +67,7 @@ void setUser( int id, String name, int member, double balance );
 void apiSucess( String dataObj );
 void apiError( String dataObj );
 void sendData( String dataJson );
+void calculetePulse(float value );
 
 void setup() {
 
@@ -71,6 +80,15 @@ void setup() {
 	startTableProducts();
 
 	configSelectProducts();
+/********************************************************/
+	calculetePulse( 0.01 );
+	calculetePulse( 0.49 );
+	calculetePulse( 0.99 );
+	calculetePulse( 1.99 );
+	calculetePulse( 5.99 );
+	calculetePulse( 15.99 );
+	calculetePulse( 95.99 );
+/********************************************************/
 
 }
 
@@ -81,12 +99,27 @@ void loop() {
 		actionButton = 0;
 
 		user.userIDE = String( rdm6300.get_tag_id(), HEX );
-		api.getSaldo( user.userIDE, setUser );
-		Serial.println( user.name + ", seu saldo é: " + user.balance );
-		Serial.println("Escolha uma opção ( 1 a 4) " );
 
-		optionMoment = 1;
-		
+		api.getSaldo( String(user.userIDE), setUser );
+
+		float value = ( user.member == 1 ) ? minPriceProductMember : minPriceProduct;
+
+		if ( user.balance > value ) {
+			Serial.println( user.name + ", seu saldo é: " + user.balance );
+			Serial.println("Escolha uma opção ( 1 a 4) " );
+			optionMoment = 1;
+			calculetePulse(user.balance);
+		}
+		else {
+			Serial.println( String(user.balance) + " é insuficiente" );
+			Serial.println("Aproxime o seu Cartão do Leitor");
+		}
+	}
+
+	if ( timeConsumer.verify( ) && ( idProdutConsumer > 0 ) ) {
+		idProdutConsumer = idProdutConsumer - 1;
+		consume( idProdutConsumer );
+		idProdutConsumer = 0;
 	}
 
 }
@@ -126,7 +159,13 @@ void consume( int option ) {
 	if ( user.balance >= value ) {
 
 		Serial.printf( "Opção escolhida [%i] \n", tableProducts[option].button );
-		String param = String(user.id) + "/" + String(tableProducts[option].id);
+
+		String param = "{\"matricula\" : " + String(user.id) 
+						+ ", \"credencial\" : \"" + String(user.userIDE) 
+						+ "\", \"produto\" : " + String(tableProducts[option].id) + "}" ;
+		
+		
+		Serial.println(param);
 		
 		api.postConsumer( param, apiSucess, apiError );
 		
@@ -174,37 +213,54 @@ void startPeripherals() {
 }
 
 void addItemTablePrices( int id, float price, float priceMember, int button ) {
+
 	tableProducts[idxProducts].id 			= id;
 	tableProducts[idxProducts].price 		= price;
 	tableProducts[idxProducts].priceMember 	= priceMember;
 	tableProducts[idxProducts].button 		= button;
 	idxProducts += 1;
 
-	Serial.printf("id = %i price = %f member = %f buttom = %i \n", id, price, priceMember, button );
+	if ( minPriceProduct > price )
+	  minPriceProduct = price;
+	if ( minPriceProductMember > priceMember )
+	  minPriceProductMember = priceMember;
+    if ( maxPriceProduct < price )
+	  maxPriceProduct = price;
+
 }
 
 void startTableProducts() {
-	Serial.println("chando api produtos ");
 	api.getProduts( addItemTablePrices );
-	Serial.println("Aproxime o seu Cartão do Leitor");
 }
 
 void IRAM_ATTR detectB1() { 
-	actionButton = ( user.balance == 0.00  ) ? 0 : 1 ;
+	actionButton = 1;
 }
+
 void IRAM_ATTR detectB2() { 
-	actionButton = ( user.balance == 0.00  ) ? 0 : 2 ;
+	actionButton = 2;
 }
+
 void IRAM_ATTR detectB3() { 
-	actionButton = ( user.balance == 0.00  ) ? 0 : 3 ;
+	actionButton = 3;
 }
+
 void IRAM_ATTR detectB4() { 
-	actionButton = ( user.balance == 0.00  ) ? 0 : 4 ;
+	actionButton = 4;
 }
 
 void IRAM_ATTR TimerConsumer() {
+
 	if ( actionButton > 0 ) {
-		consume( actionButton - 1 );
+
+		int idx = actionButton - 1;
+
+		float value = ( user.member == 1 ) ? tableProducts[idx].priceMember : tableProducts[idx].price;
+		
+		idProdutConsumer = ( value < user.balance ) ? actionButton : 0;
+
+		actionButton = 0;
+		
 	}
 }
 
@@ -220,4 +276,47 @@ void configSelectProducts() {
 
 	actionButton = 0;
 	user.balance = 0;
+}
+
+void calculetePulse( float value ) {
+
+	int real = (int) value;
+	int cents = (int) ( ( value - real) * 100 );
+
+	int tenReals	= 0;
+	int fiveReals 	= 0;
+	int oneReal 	= 0;
+
+	int tenCents    = 0;
+
+	if ( real >= 10 ) {
+		tenReals = real / 10;
+		real   	= real % 10 ;
+	}
+
+	if ( real >= 5 ) {
+		fiveReals = real / 5;
+		real   	 = real % 5 ;
+	}
+
+	if ( real > 0 ) {
+		oneReal = real;
+	}
+
+	if ( cents >= 10 ) {
+		tenCents = cents / 10;
+		cents = cents % 10;
+	}
+
+	if ( cents >= 1 ) {
+		tenCents += 1;		
+		if ( tenCents == 10 ) {
+			oneReal += 1;
+			tenCents = 0;
+		}
+	}
+int totalPulsos = tenReals + fiveReals + oneReal + tenCents;
+	Serial.printf("[%i * r$10] [%i * r$ 5] + [%i * r$ 1] + [%i r$ 0,10] <=> valor [%.2f]  [%i pulsos]\n", 
+							tenReals, fiveReals, oneReal, tenCents, value, totalPulsos ) ;
+
 }
